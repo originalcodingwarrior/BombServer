@@ -38,6 +38,8 @@ public class Player : MonoBehaviour
             GetComponent<Renderer>().material.color = Color.white;
             speed = 7f;
         }
+
+        NetworkManager.Instance.SendHasBombStatus(hasBomb); //네트워크매니저에게 바뀐 상태 전달 부탁
     }
 
 }

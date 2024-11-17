@@ -28,6 +28,8 @@ public class PlayerController : MonoBehaviour
         Vector3 moveDirection = new Vector3(horizontal, 0, vertical);
 
         transform.Translate(moveDirection * player.speed * Time.deltaTime);
+
+        NetworkManager.Instance.SendPlayerPosition(transform.position);
     }
 
     void OnTriggerEnter(Collider other)
