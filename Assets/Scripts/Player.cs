@@ -4,6 +4,7 @@ using UnityEngine;
 
 public class Player : MonoBehaviour
 {
+    public int id;
     private bool hasBomb = false;
     public float speed = 7f;
 
@@ -24,6 +25,11 @@ public class Player : MonoBehaviour
         return hasBomb;
     }
 
+    protected void SetPosition(Vector3 vector)
+    {
+        this.transform.position = vector;
+    }
+
     protected void SetPlayerHasBomb(bool hasBomb)
     {
         this.hasBomb = hasBomb;
@@ -39,7 +45,6 @@ public class Player : MonoBehaviour
             speed = 7f;
         }
 
-        NetworkManager.Instance.SendHasBombStatus(hasBomb); //네트워크매니저에게 바뀐 상태 전달 부탁
     }
 
 }

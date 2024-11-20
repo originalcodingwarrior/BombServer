@@ -460,6 +460,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1669f3e6794377e40890c5b24b9a05a8, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  id: 0
   speed: 7
 --- !u!54 &807188488
 Rigidbody:
@@ -625,6 +626,13 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   player: {fileID: 807188487}
+  otherPlayers:
+  - {fileID: 1568443469}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
 --- !u!4 &1129856157
 Transform:
   m_ObjectHideFlags: 0
@@ -910,6 +918,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 85a18fc25b35b3d4e8495a2520c14b1c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  id: 0
   speed: 7
 --- !u!33 &1568443470
 MeshFilter:
@@ -928,7 +937,7 @@ Transform:
   m_GameObject: {fileID: 1568443466}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -4.62, y: 0, z: 0}
+  m_LocalPosition: {x: -10.02, y: -0.21, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []

@@ -25,12 +25,18 @@ public class PlayerController : MonoBehaviour
         float horizontal = Input.GetAxis("Horizontal"); //A,D 입력
         float vertical = Input.GetAxis("Vertical"); //W,S 입력
 
-        Vector3 moveDirection = new Vector3(horizontal, 0, vertical);
+        if(horizontal != 0 || vertical != 0) {
 
-        transform.Translate(moveDirection * player.speed * Time.deltaTime);
+            Vector3 moveDirection = new Vector3(horizontal, 0, vertical);
 
-        NetworkManager.Instance.SendPlayerPosition(transform.position);
-    }
+            transform.Translate(moveDirection * player.speed * Time.deltaTime);
+
+            NetworkManager.Instance.SendData();
+
+        }
+
+
+        }
 
     void OnTriggerEnter(Collider other)
     {

@@ -18,4 +18,11 @@ public class OtherPlayer : Player
         
     }
 
+    public void UpdateData(Vector3 position, bool hasBomb)
+    {
+        this.SetPosition(position);
+        this.SetPlayerHasBomb(hasBomb);
+      
+    }
+
 }

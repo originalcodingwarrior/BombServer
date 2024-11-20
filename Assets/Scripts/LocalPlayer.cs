@@ -37,5 +37,7 @@ public class LocalPlayer : Player
             Debug.Log("이런젠장");
             SetPlayerHasBomb(true); //폭탄 생김
         }
+
+        NetworkManager.Instance.SendData();
     }
 }

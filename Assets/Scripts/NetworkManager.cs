@@ -1,29 +1,25 @@
 using System;
-using System.Net;
 using System.Net.Sockets;
-using System.IO;
+using System.Threading.Tasks;
 using UnityEngine;
-using System.Collections.Generic;
 
 public class NetworkManager : MonoBehaviour
 {
-    private Socket clientSocket;
-    private byte[] buffer = new byte[16];
-    public Player player;
-
     public static NetworkManager Instance;
+
+    TcpClient client;
+    NetworkStream stream;
+
+    public Player player;
+    public OtherPlayer[] otherPlayer;
+
+    public const int MAX_CLIENTS = 6;
 
     private void Awake()
     {
         if(Instance == null)
         {
             Instance = this;
-
-            DontDestroyOnLoad(this.gameObject);
-        }
-        else
-        {
-            Destroy(this.gameObject);
         }
     }
 
@@ -31,77 +27,94 @@ public class NetworkManager : MonoBehaviour
     void Start()
     {
         ConnectToServer("117.16.44.109", 8080);
-    }
-
-    // Update is called once per frame
-    void Update()
-    {
-
-    }
-
-    void OnApplicationQuit()
-    {
-        if (IsSocketConnected())
-            clientSocket.Close();
+        ReceiveData();
     }
 
     void ConnectToServer(string ip, int port)
     {
         try
         {
-            clientSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-            clientSocket.Connect(new IPEndPoint(IPAddress.Parse(ip), port));
-            
-            Debug.Log("서버와 연결");
-
+            client = new TcpClient(ip, port);
+            stream = client.GetStream();
+            Debug.Log("서버에 연결됨 ");
         }
         catch (Exception e)
         {
-            Debug.Log("서버와 연결 실패 :" + e.Message);
+            Debug.LogError("서버 연결 실패 " + e.Message);
+
         }
     }
 
-    public void SendHasBombStatus(bool hasBomb)
+    public void SendData()
     {
-        if (!IsSocketConnected()) return;
-
         try
         {
-            byte[] data = new byte[1];
-            data[0] = hasBomb ? (byte)1 : (byte)0;
+            float x = player.transform.position.x;
+            float y = player.transform.position.y;
+            float z = player.transform.position.z;
 
-            clientSocket.Send(data);
+            byte[] buffer = new byte[13];
+            System.Buffer.BlockCopy(new float[] { x, y, z }, 0, buffer, 0, 12);
+            buffer[12] = (byte)(player.HasBomb() ? 1 : 0);
 
+            stream.Write(buffer, 0, buffer.Length);
         }
-        catch (Exception e)
+        catch(Exception e) 
         {
-            Debug.Log("데이터 전송 실패 :" + e.Message);
+            Debug.LogError("데이터 전송 실패 " + e.Message);
         }
+        
     }
-    public void SendPlayerPosition(Vector3 vector3)
-    {
-        if (!IsSocketConnected()) return;
 
+    private async void ReceiveData()
+    {
+        byte[] buffer = new byte[17];
         try
         {
-            List<byte> dataList = new List<byte>();
+            int bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length);
 
-            dataList.AddRange(BitConverter.GetBytes(vector3.x));
-            dataList.AddRange(BitConverter.GetBytes(vector3.y));
-            dataList.AddRange(BitConverter.GetBytes(vector3.z));
-
-            byte[] data = dataList.ToArray();
-            clientSocket.Send(data);
-
+            if (bytesRead > 0)
+            {
+                ProcessData(buffer);
+                ReceiveData();
+            }
         }
         catch (Exception e)
         {
-            Debug.Log("데이터 전송 실패 :" + e.Message);
+            Debug.Log("데이터 수신 실패 " + e.Message);
         }
     }
 
-    bool IsSocketConnected()
+    //데이터 직렬화
+    private void ProcessData(byte[] buffer)
     {
-        return clientSocket != null && clientSocket.Connected;
+        int clientID = BitConverter.ToInt32(buffer, 0);
+        float x = BitConverter.ToSingle(buffer, 4);
+        float y = BitConverter.ToSingle(buffer, 8);
+        float z = BitConverter.ToSingle(buffer, 12);
+        bool hasBomb = BitConverter.ToBoolean(buffer, 16);
+
+        Debug.Log($"ID : {clientID}, Position: ({x}, {y}, {z}), hasBomb: {hasBomb}");
+
+        UpdateOtherPlayer(clientID, new Vector3(x,y,z), hasBomb);
+    }
+
+    void UpdateOtherPlayer(int id, Vector3 position, bool hasBomb)
+    {
+        if(otherPlayer[id - 1] != null)
+        {
+            otherPlayer[id - 1].UpdateData(position, hasBomb);
+        }
+        else
+        {
+            Debug.LogWarning(id + "번 플레이어가 없음");
+        }
+    }
+
+
+    private void OnApplicationQuit()
+    {
+        stream.Close();
+        client.Close();
     }
 }
