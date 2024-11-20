@@ -3,49 +3,20 @@
 #include <string.h>
 #include <unistd.h>
 #include <arpa/inet.h>
-#include <sys/shm.h>
 #include <sys/ipc.h>
 #include <sys/wait.h>
 #include "client_data.h"
 #include "client_handler.h"
 
 #define PORT 8080
-#define SHM_SIZE sizeof(ClientData) * MAX_CLIENTS
 
-int client_count = 0; //현재 접속된 클라이언트 수
-ClientData *shmaddr;
-
-//자식 프로세스에서 시그널 보내면 실행
-void send_data_to_clients(int signo){
-	/*
-	for(int i = 0; i < client_count; i++) {
-		if(send(shmaddr[i].socket_fd, shmaddr, sizeof(ClientData) * client_count, 0) < 0)
-			printf("클라이언트%d에게 데이터 전송 실패\n", i + 1);
-		else
-			printf("클라이언트%d에게 데이터 전송 성공\n", i + 1);
-	}
-	*/
-
-	//유니티에서 서버로부터 데이터 받는 거까지 구현되면 주석 풀 것.
-}
-
-int main() {
+int server_fd;
 	
-	int server_fd;
-	int client_socket;
-	struct sockaddr_in address;
-	int adrlen = sizeof(address);		
+struct sockaddr_in address;
+int adrlen = sizeof(address);		
 
 
-	int shmid;
-
-	signal(SIGUSR1, send_data_to_clients);
-
-	//공유메모리 생성
-	shmid = shmget(IPC_PRIVATE, SHM_SIZE, IPC_CREAT | 0666);
-	shmaddr = (ClientData *)shmat(shmid, NULL, 0);
-	memset(shmaddr, 0, SHM_SIZE);
-
+void open_server() {
 	//소켓 생성
 	server_fd = socket(AF_INET, SOCK_STREAM, 0);
 	if(server_fd == 0) {
@@ -71,10 +42,28 @@ int main() {
 
 	printf("서버 포트 : %d \n", PORT);
 
+}
+
+int main() {
+	
+	int client_count = 0; //현재 접속된 클라이언트 수
+	int client_sockets[MAX_CLIENTS]; //클라이언트들 소켓 저장
+	
+	int client_socket;
+
+	int pipefd[2];
+
+	ClientData data;
+	
+	if(pipe(pipefd) == -1) {
+		perror("파이프 생성 오류");
+		exit(EXIT_FAILURE);
+	}
+
+	open_server();
 
 	//부모 프로세스
-	//클라이언트 자식프로세스 생성
-	//자식프로세스로부터 시그널(SIGUSR1) 받으면 공유메모리 상태를 모든 클라이언트들에게 전송	
+	//클라이언트 접속할때마다 해당 클라이언트로부터 데이터 수신할  자식프로세스 생성	
 	while(1) {
 
 		if((client_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t *)&adrlen)) < 0) {
@@ -89,21 +78,44 @@ int main() {
 		}
 	
 		printf("%d번째  클라이언트 접속", client_count + 1);
-		int client_id = client_count++;
-	
-		//자식 프로세스
-		//해당 클라이언트로부터 받은 데이터를 공유메모리에 갱신
-		//handle_client에서 갱신할때마다 시그널 보내기
+		client_sockets[client_count++] = client_socket;
+		int clientID = client_count;	
+
+		//자식 프로세스		
 		if(fork() == 0) {
 			close(server_fd);
-			handle_client(client_socket, shmaddr, client_id);
+			close(pipefd[0]);
+
+			handle_client(client_socket, clientID, pipefd[1]);
+
+			close(pipefd[1]);
 			exit(0);
-		}
-	
+		} else {
+					
+			if(read(pipefd[0], &data, sizeof(data)) > 0) {
+
+				char buffer[20];
+
+				memcpy(buffer, &data.clientID, sizeof(int));
+				memcpy(buffer + 4, &data.position[0], sizeof(float));
+				memcpy(buffer + 8, &data.position[1], sizeof(float));
+				memcpy(buffer + 12, &data.position[2], sizeof(float));
+				memcpy(buffer + 16, &data.hasBomb, sizeof(bool));
+
+				for(int i = 0; i < client_count; i++) {
+					if(data.clientID == i + 1) continue;
+					send(client_sockets[i], buffer, 17, 0);
+				}
+			}	
+		}                                                                                            
+
 		close(client_socket);
 
 	}
 
+	close(server_fd);
+	close(pipefd[0]);
+	close(pipefd[1]);
 
 	return 0;
 }

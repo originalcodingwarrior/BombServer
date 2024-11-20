@@ -11,6 +11,6 @@
 #include<sys/types.h>
 #include"client_data.h"
 
-void handle_client(int client_socket, ClientData *shmaddr, int clinet_id);
+void handle_client(int client_socket, int clinet_id, int write_fd);
 
 #endif
