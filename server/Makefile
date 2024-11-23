@@ -1,10 +1,13 @@
-all: server
+all: server client
 
-server:main.o client_handler.o
-	gcc -o server main.o client_handler.o
+server: main.o
+	gcc -o server main.o
 
-main.o: main.c client_handler.h
+main.o: main.c
 	gcc -c main.c
 
-client_handler.o: client_handler.c
-	gcc -c client_handler.c 
+client: client.o
+	gcc -o client client.o
+
+client.o: client.c
+	gcc -c client.c

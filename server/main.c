@@ -1,121 +1,162 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <arpa/inet.h>
-#include <sys/ipc.h>
-#include <sys/wait.h>
-#include "client_data.h"
-#include "client_handler.h"
+#include<stdio.h>
+#include<stdlib.h>
+#include<unistd.h>
+#include<signal.h>
+#include<fcntl.h>
+#include<sys/stat.h>
+#include<sys/wait.h>
+#include<sys/ipc.h>
+#include<sys/shm.h>
+#include<string.h>
+#include "shared_data.h"
 
-#define PORT 8080
+#define FIFO_PATH "./client_ready_fifo"
+#define TURNS 3
 
-int server_fd;
-	
-struct sockaddr_in address;
-int adrlen = sizeof(address);		
+pid_t client_pid[CLIENTS_NUM];
+SharedData* shmaddr;
 
+void signal_handler(int sig) {
 
-void open_server() {
-	//소켓 생성
-	server_fd = socket(AF_INET, SOCK_STREAM, 0);
-	if(server_fd == 0) {
-		perror("소켓 생성 실패");
-		exit(EXIT_FAILURE);
-	}
-
-	address.sin_family = AF_INET;
-	address.sin_addr.s_addr = INADDR_ANY;
-	address.sin_port = htons(PORT);
-	
-	if(bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
-		perror("바인딩  실패");
-		close(server_fd);
-		exit(EXIT_FAILURE);
-	}
-
-	if(listen(server_fd, MAX_CLIENTS) < 0) {
-		perror("접속 대기 실패");
-		close(server_fd);
-		exit(EXIT_FAILURE);
-	}
-
-	printf("서버 포트 : %d \n", PORT);
-
+	shmaddr->turn_complete = 1; //현재 턴이 완료되었다고 표시
 }
 
+int get_winner() {
+	//공유메모리에서 choice 값 다 비교하고
+	//누가 승자인지 확인 후
+	//승자 ID 반환
+
+	//일단은 그냥 임시로 더큰숫자 부른쪽이 승자해둠
+	
+	int winner_ID = 0;
+
+	for(int i = 1; i < CLIENTS_NUM; i++) {
+		if(shmaddr->choice[winner_ID] < shmaddr->choice[i]) {
+			winner_ID = i;
+			continue;
+		}
+	}
+
+	return winner_ID;
+}
+
+void game() {
+	int turn = 1;
+	int scores[CLIENTS_NUM] = {0,0};
+
+	while(turn <= TURNS) {
+		printf("%d번째 턴 시작\n", turn);
+		
+		for(int i = 0; i < CLIENTS_NUM; i++) {
+			printf("%d번 플레이어의 차례\n", i);
+
+			shmaddr->turn_owner_ID = i;
+			shmaddr->turn_complete = 0;
+
+			//턴 시작하라는 신호를 보냄
+			kill(client_pid[i], SIGUSR1);
+
+			while(!shmaddr->turn_complete){
+				pause();
+			}
+
+			printf("%d번 플레이어의 선택 : %d\n", i, shmaddr->choice[i]);
+		}
+
+		int current_winner = get_winner();
+		scores[current_winner] += 10;
+		printf("이번 턴 승자 : %d\n", current_winner);
+		printf("현재 점수\n");
+		
+		for(int i = 0; i < CLIENTS_NUM; i++)
+			printf("%d 플레이어 : %d점\n", i, scores[i]);
+
+		turn++;
+	}
+
+	printf("모든 턴 종료 \n");
+}
+		
 int main() {
-	
-	int client_count = 0; //현재 접속된 클라이언트 수
-	int client_sockets[MAX_CLIENTS]; //클라이언트들 소켓 저장
-	
-	int client_socket;
 
-	int pipefd[2];
+	key_t key;
+	key = ftok(SHM_KEY, 1);
 
-	ClientData data;
-	
-	if(pipe(pipefd) == -1) {
-		perror("파이프 생성 오류");
-		exit(EXIT_FAILURE);
+	int shmid = shmget(key, SHM_SIZE, IPC_CREAT | 0644);
+	shmaddr = (SharedData *)shmat(shmid, NULL, 0);
+	if(shmaddr == (void*) -1) {
+		perror("shmat");
+		exit(1);
+	}
+	memset(shmaddr, 0, SHM_SIZE);
+
+	if(access(FIFO_PATH, F_OK) == 0) unlink(FIFO_PATH);
+
+	if(mkfifo(FIFO_PATH, 0666) == -1) {
+		perror("mkfifo");
+		exit(1);
 	}
 
-	open_server();
+	//클라이언트 프로세스 생성, 실행
+	for(int i = 0; i < CLIENTS_NUM; i++) {
+		printf("클라이언트 %d 프로세스 생성\n", i);
+		pid_t pid = fork();
+		
+		if(pid == 0) {
 
-	//부모 프로세스
-	//클라이언트 접속할때마다 해당 클라이언트로부터 데이터 수신할  자식프로세스 생성	
-	while(1) {
+			int write_fd = open(FIFO_PATH, O_WRONLY);
 
-		if((client_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t *)&adrlen)) < 0) {
-			perror("접속 실패");
-			continue;
-		}
-	
-		if(client_count >= MAX_CLIENTS) {
-			printf("최대 클라이언트 수 초과");
-			close(client_socket);
-			continue;
-		}
-	
-		printf("%d번째  클라이언트 접속", client_count + 1);
-		client_sockets[client_count++] = client_socket;
-		int clientID = client_count;	
+			if(write_fd == -1) {
+				perror("open");
+		         exit(1);
+			}
 
-		//자식 프로세스		
-		if(fork() == 0) {
-			close(server_fd);
-			close(pipefd[0]);
+			char client_id[10];
+			snprintf(client_id, sizeof(client_id), "%d", i);
 
-			handle_client(client_socket, clientID, pipefd[1]);
+			execl("./client", "./client", client_id,  NULL);
+			perror("execl");
 
-			close(pipefd[1]);
-			exit(0);
+			close(write_fd);
+			exit(1);
 		} else {
-					
-			if(read(pipefd[0], &data, sizeof(data)) > 0) {
-
-				char buffer[20];
-
-				memcpy(buffer, &data.clientID, sizeof(int));
-				memcpy(buffer + 4, &data.position[0], sizeof(float));
-				memcpy(buffer + 8, &data.position[1], sizeof(float));
-				memcpy(buffer + 12, &data.position[2], sizeof(float));
-				memcpy(buffer + 16, &data.hasBomb, sizeof(bool));
-
-				for(int i = 0; i < client_count; i++) {
-					if(data.clientID == i + 1) continue;
-					send(client_sockets[i], buffer, 17, 0);
-				}
-			}	
-		}                                                                                            
-
-		close(client_socket);
-
+			client_pid[i] = pid;
+		}
 	}
 
-	close(server_fd);
-	close(pipefd[0]);
-	close(pipefd[1]);
+	int read_fd = open(FIFO_PATH, O_RDONLY);
+	if(read_fd == -1) {
+		perror("open");
+		exit(1);
+	} /*
+	 else {
+		printf("read_fd : %d\n", read_fd);
+	} */
+
+	for(int i = 0; i < CLIENTS_NUM; i++) {
+		char buffer[256];
+
+		read(read_fd, buffer, sizeof(buffer));
+		
+		printf("클라이언트 %d: 준비 완료\n", i);
+	}
+
+	close(read_fd);
+	unlink(FIFO_PATH);
+	printf("모든 클라이언트 프로세스 준비 완료\n");
+
+	//클라이언트 프로세스에서 턴 입력 다 끝나면 시그널을 보낼 것임
+	signal(SIGUSR1, signal_handler);
+
+	game();
+
+	for(int i = 0; i < CLIENTS_NUM; i++) {
+		waitpid(client_pid[i], NULL, 0);
+	}
+
+	shmdt(shmaddr);
+	shmctl(shmid, IPC_RMID, NULL);
 
 	return 0;
 }
+		
