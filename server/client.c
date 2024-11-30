@@ -3,6 +3,7 @@
 SharedData* shmaddr;
 int clientID;
 int clientSocket;
+int game_running;
 
 void next_turn(int sig) {
 
@@ -18,7 +19,7 @@ void next_turn(int sig) {
 	memcpy(buffer + sizeof(int), &shmaddr->timer, sizeof(float));
 
 	write(clientSocket, buffer, sizeof(buffer));
-	printf("%d 플레이어 유니티로 데이터 전송 성공\n", clientID);
+	//printf("%d 플레이어 유니티로 데이터 전송 성공\n", clientID);
 
 	if(clientID == shmaddr->bomb_owner) {  //본인의 차례였을 경우	
 			
@@ -49,6 +50,8 @@ void game_end(int sig) {
 	memcpy(buffer + sizeof(int), &timer, sizeof(float));
 
 	write(clientSocket, buffer, sizeof(buffer));
+
+	game_running = 0;
 
 }
 
@@ -81,8 +84,10 @@ void handle_client(int client_id, int client_socket) {
 
 	close(write_fd);
 
+	game_running = 1;
+
 	//메인에서 시그널  줄 때까지 대기
-	while(1) {
+	while(game_running) {
 		pause();
 	}
 

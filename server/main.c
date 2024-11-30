@@ -19,6 +19,8 @@
 
 pid_t client_pid[CLIENTS_NUM];
 SharedData* shmaddr;
+int server_running;
+
 
 void signal_handler(int sig) {
 
@@ -31,7 +33,7 @@ void game() {
 	//shm의 bomb_owner를 설정 -> 0번부터 시작하게끔
 	
 	srand(time(NULL));
-	shmaddr->timer = (rand() % 6) + 20;
+	shmaddr->timer = (rand() % 6) + 10;
 	shmaddr->bomb_owner = -1;
 
 	printf("타이머 : %f\n\n", shmaddr->timer);
@@ -55,7 +57,7 @@ void game() {
 	for(int i = 0; i < CLIENTS_NUM; i++)
 		kill(client_pid[i], SIGUSR2); //게임 종료 신호
 	
-	printf("게임 종료 \n");
+	printf("게임 종료 \n\n");
 }
 		
 int main() {
@@ -90,6 +92,9 @@ int main() {
 		exit(EXIT_FAILURE);
 	}
 
+	int opt = 1;
+	setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+
 	address.sin_family = AF_INET;
 	address.sin_addr.s_addr = INADDR_ANY;
 	address.sin_port = htons(PORT);
@@ -108,6 +113,8 @@ int main() {
 
 	printf("서버 포트 : %d \n", PORT);
 
+	while(1) {
+	
 	int client_count = 0;
 	while(client_count < CLIENTS_NUM) {
 
@@ -150,14 +157,13 @@ int main() {
 		
 		char buffer[16];
 		ssize_t bytes_read = read(read_fd, buffer, sizeof(buffer));
-		if(bytes_read > 0)
+		if(bytes_read > 0) {
 			ready_count++;		
-
-		printf("준비된 클라이언트 %d / %d\n", ready_count, CLIENTS_NUM);
+			printf("준비된 클라이언트 %d / %d\n", ready_count, CLIENTS_NUM);
+		}
 	}
 
 	close(read_fd);
-	unlink(FIFO_PATH);
 	printf("모든 클라이언트 프로세스 준비 완료\n\n");
 
 	//클라이언트 프로세스에서 턴 입력 다 끝나면 시그널을 보내줄  것임
@@ -165,10 +171,17 @@ int main() {
 
 	game();
 
+
+	printf("자식프로세스 종료 대기중\n");
 	for(int i = 0; i < CLIENTS_NUM; i++) {
 		waitpid(client_pid[i], NULL, 0);
 	}
+	printf("모든 자식프로세스 종료 완료\n");
 
+	}
+
+	
+	unlink(FIFO_PATH);
 	shmdt(shmaddr);
 	shmctl(shmid, IPC_RMID, NULL);
 

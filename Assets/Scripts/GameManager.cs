@@ -8,6 +8,10 @@ public class GameManager : MonoBehaviour
     public static GameManager Instance;
 
     public GameObject bomb;
+    public GameObject loadingImage;
+    public GameObject gameOverText;
+
+    public ParticleSystem explosion;
 
     public Vector3[] bombPosition;
     /* 0번이 로컬플레이어 자리
@@ -15,9 +19,11 @@ public class GameManager : MonoBehaviour
         3     1
            0
       이렇게 반시계방향으로 돌아감 */
+    private int bombOwner;
 
     public Button passButton;
-    public bool isTimerRunning;
+    public GameObject replayButton;
+    private bool isTimerRunning;
 
     private void Awake()
     {
@@ -34,7 +40,7 @@ public class GameManager : MonoBehaviour
     // Start is called before the first frame update
     void Start()
     {
-        
+        NetworkManager.Instance.OnGameReady += GameIsReady;
     }
 
     // Update is called once per frame
@@ -45,8 +51,21 @@ public class GameManager : MonoBehaviour
 
     void GameEnd()
     {
-        bomb.GetComponent<ParticleSystem>().Play();
+        explosion.transform.position = bombPosition[bombOwner];
+        explosion.Play();
         Debug.Log("펑~");
+        Destroy(bomb);
+
+        GameObject Loser = GameObject.Find("Player " + bombOwner);
+        Loser.GetComponent<PlayerController>().Explosion();
+
+        if(bombOwner == 0)
+        {
+            gameOverText.SetActive(true);
+        }
+
+        replayButton.SetActive(true);
+
     }
 
     public void UpdateGameState(int bomb_owner, float timer)
@@ -56,9 +75,10 @@ public class GameManager : MonoBehaviour
             GameEnd();
         }
 
-        bomb.transform.position = bombPosition[bomb_owner];
+        bombOwner = bomb_owner;
+        bomb.transform.position = bombPosition[bombOwner];
 
-        if (bomb_owner == 0) //본인 차례였으면 타이머 시작
+        if (bombOwner == 0) //본인 차례였으면 타이머 시작
         {
             passButton.interactable = true;
             StartCoroutine(StartTimer(timer));
@@ -84,5 +104,13 @@ public class GameManager : MonoBehaviour
     public void StopTimer() //버튼 누르면 실행
     {
         isTimerRunning = false;
+    }
+
+    private void GameIsReady()
+    {
+        loadingImage.SetActive(false);
+        Debug.Log("모든 클라이언트 접속 완료. 게임 시작");
+
+        NetworkManager.Instance.OnGameReady -= GameIsReady;
     }
 }

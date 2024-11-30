@@ -7,6 +7,9 @@ public class NetworkManager : MonoBehaviour
 {
     public static NetworkManager Instance;
 
+    public event Action OnGameReady;
+    private bool isGameReady = false;
+
     TcpClient client;
     NetworkStream stream;
 
@@ -81,7 +84,7 @@ public class NetworkManager : MonoBehaviour
     }
 
     //데이터 직렬화
-    private void ProcessData(byte[] buffer)
+    public void ProcessData(byte[] buffer)
     {
         int bomb_owner = BitConverter.ToInt32(buffer, 0);
         float timer = BitConverter.ToSingle(buffer, 4);
@@ -89,12 +92,21 @@ public class NetworkManager : MonoBehaviour
         Debug.Log($"현재 턴 : {bomb_owner}, 남은 카운트 : {timer}");
 
         GameManager.Instance.UpdateGameState(bomb_owner, timer);
+
+        if (!isGameReady)
+        {
+            OnGameReady?.Invoke();
+            isGameReady = true;
+        }
     }
 
 
-    private void OnApplicationQuit()
+    void OnDestroy()
     {
-        stream.Close();
-        client.Close();
+        if(stream != null)
+            stream.Close();
+
+        if(client != null)
+            client.Close();
     }
 }
